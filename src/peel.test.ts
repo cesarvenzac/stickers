@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cornerNear, FLAT, foldFor, layersAt, liftedShare, pastFold, placeOf, pullToLift, reachFor, rolled, travel } from "./peel.ts";
+import { FLAT, foldFor, layersAt, liftedShare, pastFold, placeOf, pullToLift, reachFor, rolled, travel } from "./peel.ts";
 
 const RADIUS = 10;
 
@@ -95,29 +95,5 @@ describe("liftedShare and pullToLift", () => {
     const fold = foldFor(grab, { x: grab.x - pull, y: grab.y }, { x: 1, y: 0 }, RADIUS);
     expect(liftedShare(fold, extent)).toBe(1);
     expect(pastFold(fold, { x: 0, y: 50 })).toBeCloseTo(Math.PI * RADIUS, 6);
-  });
-});
-
-describe("cornerNear", () => {
-  const square = [
-    { x: 0, y: 0 },
-    { x: 100, y: 0 },
-    { x: 100, y: 100 },
-    { x: 0, y: 100 },
-  ];
-
-  it("finds the nearest corner and the way out of it, its bisector", () => {
-    const near = cornerNear(square, { x: 90, y: 8 })!;
-    expect(near.corner).toEqual({ x: 100, y: 0 });
-    expect(near.outward.x).toBeCloseTo(Math.SQRT1_2);
-    expect(near.outward.y).toBeCloseTo(-Math.SQRT1_2);
-    expect(near.distance).toBeCloseTo(Math.hypot(10, 8));
-  });
-
-  it("lifts only the corner: nothing else of the shape is past a fold near it", () => {
-    const near = cornerNear(square, { x: 4, y: 96 })!;
-    const fold = foldFor({ x: near.corner.x - near.outward.x, y: near.corner.y - near.outward.y }, { x: near.corner.x - 8 * near.outward.x, y: near.corner.y - 8 * near.outward.y }, near.outward, RADIUS);
-    const lifted = square.filter((corner) => pastFold(fold, corner) > 0);
-    expect(lifted).toEqual([{ x: 0, y: 100 }]);
   });
 });

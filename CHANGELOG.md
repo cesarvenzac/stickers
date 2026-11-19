@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Holographic patterns. `pattern` lays a holographic foil's grooves: `smooth` (the foil as it was, the default), `lines`, `squares`, `dots` or `shards`. The foil is drawn as a diffraction grating: each line, tile, dot or shard flashes its colour as the light comes square to its grooves and is silver otherwise; a dot, grooved in rings, draws a bright spoke turned to the light. `PATTERNS` lists them.
+- Nothing lifts on hover any more. A straight fold across a round edge never matched the shape it lifted; the pointer still shows a hand where a sticker can be peeled.
+- Scratch cards are gone (`scratch`, React's `Scratch`): scratching a sticker that's stuck fast is to come back in its place, as part of peeling.
+- The `steel` finish is gone, until it looks as it should.
+- The README opens on the board from its docs: the foils catching the light, the bolt peeled and laid back down, the heart picked up and put back.
+
 ## 0.1.0
 
 The first version.

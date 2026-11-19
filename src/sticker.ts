@@ -12,18 +12,22 @@ import { edgeAt, extentAlong, type Point } from "./field.ts";
 import { drawInto, fieldTexture, freeTexture, imageTexture, type Stage, stageNow, type Texture, watchStage } from "./gl.ts";
 import { atRest, type Body, follow, HANDLING, settle, type Spring, sprung, type Sprung, stepSpring, still, toLocal } from "./motion.ts";
 import { animate, colourOf, given, onPointer, onScheme, pageIsDark, pointerNow, stopAnimating, wantsLessMotion } from "./page.ts";
-import { cornerNear, type Fold, foldFor, liftedShare, pullToLift } from "./peel.ts";
+import { type Fold, foldFor, liftedShare, pullToLift } from "./peel.ts";
 import { chargeAfter, glowOf } from "./phosphor.ts";
-import { FINISHES } from "./shaders.ts";
+import { FINISHES, PATTERNS } from "./shaders.ts";
 
 export type Finish = (typeof FINISHES)[number];
+/** How a holographic foil's grooves are laid: one `smooth` wavering sheet (the default), or `lines`, `squares`, `dots` or `shards`, each grooved its own way. */
+export type Pattern = (typeof PATTERNS)[number];
 
 /** Where a sticker sits: moved `x` and `y` pixels from where the page laid it out, turned `angle` radians clockwise. */
 export type Place = { x: number; y: number; angle: number };
 
 export type StickerOptions = {
-  /** How it takes the light: `paper`, `gloss` (the default), `holo`, `glitter`, `steel` or `glow` (glow in the dark). */
+  /** How it takes the light: `paper`, `gloss` (the default), `holo` (holographic foil), `glitter` or `glow` (glow in the dark). */
   finish?: Finish;
+  /** A holographic foil's pattern: `smooth` (the default), `lines`, `squares`, `dots` or `shards`. */
+  pattern?: Pattern;
   /** What it shows, in words, for assistive tech. */
   label?: string;
   /** How wide the border round the art is, in pixels. A sixteenth of the box's shorter side unless said; 0 cuts close to the art. */
@@ -85,7 +89,6 @@ export type Sticker = {
 
 const PRESS: Spring = { duration: 0.42, bounce: 0.32 };
 const LAY_BACK: Spring = { duration: 0.5, bounce: 0.28 };
-const PEEK: Spring = { duration: 0.32, bounce: 0.15 };
 const LIFT: Spring = { duration: 0.28, bounce: 0 };
 const TILT: Spring = { duration: 0.22, bounce: 0.1 };
 const GLIDE: Spring = { duration: 0.25, bounce: 0 };
@@ -144,7 +147,6 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
   let pullX = sprung(0);
   let pullY = sprung(0);
   let pulling = false;
-  let peeking = false;
   let leaving = false;
   // Held: the body, the point held (from its middle), where the hand is (pixels from where it was laid out).
   let body: Body = still(settings.place?.x ?? 0, settings.place?.y ?? 0, settings.place?.angle ?? 0);
@@ -334,7 +336,6 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
     const inset = Math.min(1.5, band() / 6);
     grab = { x: edge.nearest.x - outward.x * inset, y: edge.nearest.y - outward.y * inset };
     pulling = true;
-    peeking = false;
     setState("peeling");
     pullTo(at, true);
   }
@@ -354,7 +355,6 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
 
   function layBack() {
     pulling = false;
-    peeking = false;
     if (lessMotion()) {
       pullX = sprung(0);
       pullY = sprung(0);
@@ -393,7 +393,6 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
   /** It came off in the hand: it lies flat, lifts, and follows the hand by the point it was peeled from. */
   function pickUp(at: Point, client: Point) {
     pulling = false;
-    peeking = false;
     pullX = { ...pullX, target: 0 };
     pullY = { ...pullY, target: 0 };
     hold({ x: grab.x - box.width / 2, y: grab.y - box.height / 2 }, client);
@@ -467,44 +466,13 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
       return;
     }
     if (event.pointerType === "touch" || event.buttons) return;
-    // Hovering: an edge that can be peeled lifts a little toward the pointer, asking to be.
-    const at = localOf(event.clientX, event.clientY);
-    const edge = edgeNear(at);
+    // Hovering: a hand where it can be peeled or picked up. Nothing lifts until it's pressed: a
+    // straight fold across a round edge never matched the shape it lifted.
+    const edge = edgeNear(localOf(event.clientX, event.clientY));
     if (!edge) return;
     const nearEdge = settings.peel && edge.distance > -band() && edge.distance < band() * 0.35;
     element.style.cursor = nearEdge || (settings.drag && edge.distance < 0.5) ? "grab" : "";
-    // It's lifted at the corner nearest the pointer, as a sticker is: a fold near a corner of
-    // its hull lifts only that corner, where one square to a straight edge would lift all of it.
-    const corner = nearEdge && !lessMotion() && state === "resting" ? cornerNear(prepared.hull, at) : null;
-    if (corner && corner.distance < band() * 1.6) {
-      outward = corner.outward;
-      grab = insideFrom(corner.corner, corner.outward);
-      // Far enough to tip the corner up a little, not over: a lip, its art tilting toward the pointer.
-      const reach = curl() * 0.15;
-      pullX = { ...pullX, target: -outward.x * reach };
-      pullY = { ...pullY, target: -outward.y * reach };
-      peeking = true;
-      redraw();
-    } else if (peeking) unpeek();
   };
-
-  /** A point of the sheet just inside its cut, from a point on its hull, stepping in along `outward`. */
-  function insideFrom(point: Point, out: Point): Point {
-    let inside = { x: point.x - out.x, y: point.y - out.y };
-    for (let step = 0; step < 24; step++) {
-      const edge = edgeNear(inside);
-      if (!edge || edge.distance < -1) break;
-      inside = { x: inside.x - out.x, y: inside.y - out.y };
-    }
-    return inside;
-  }
-
-  function unpeek() {
-    peeking = false;
-    pullX = { ...pullX, target: 0 };
-    pullY = { ...pullY, target: 0 };
-    redraw();
-  }
 
   const up = (event: PointerEvent) => {
     if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
@@ -516,7 +484,6 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
   };
 
   const leaveHover = () => {
-    if (peeking) unpeek();
     if (!pulling && state !== "held") element.style.cursor = "";
   };
 
@@ -597,7 +564,7 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
       };
       // The peel.
       {
-        const spring = pulling ? FOLLOW : leaving ? LEAVE : peeking ? PEEK : LAY_BACK;
+        const spring = pulling ? FOLLOW : leaving ? LEAVE : LAY_BACK;
         pullX = step(spring, pullX);
         pullY = step(spring, pullY);
         if (!atRest(pullX, 0.05) || !atRest(pullY, 0.05)) moving = true;
@@ -694,9 +661,9 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
     const sin = Math.sin(body.angle);
     const key = [KEY[0] * cos + KEY[1] * sin, -KEY[0] * sin + KEY[1] * cos, KEY[2]];
     const finish = FINISHES.indexOf(settings.finish);
+    const pattern = PATTERNS.indexOf(settings.pattern ?? "smooth");
     const ok = drawInto(
       s,
-      "sticker",
       canvas,
       {
         uScale: scale,
@@ -706,6 +673,7 @@ export function sticker(element: HTMLElement, src: Source, options: StickerOptio
         uKey: key,
         uDark: dark.value,
         uFinish: finish < 0 ? 1 : finish,
+        uPattern: Math.max(0, pattern),
         uSeed: seed,
         uCharge: glowOf(charge),
         uGlow: colours.glow,

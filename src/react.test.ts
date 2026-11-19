@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Scratch, Sticker } from "./react.tsx";
+import { Sticker } from "./react.tsx";
 
 const DOT = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="var(--paint-1)"/></svg>`;
 
@@ -22,11 +22,5 @@ describe("Sticker on a server", () => {
     expect(markup).toContain(`<img src="/heart.png" alt=""`);
     expect(markup).toContain("translate:10px -5px");
     expect(markup).toContain("rotate:0.2rad");
-  });
-});
-
-describe("Scratch on a server", () => {
-  it("draws what it holds", () => {
-    expect(renderToStaticMarkup(createElement(Scratch, { className: "card" }, "You won"))).toBe(`<div class="card">You won</div>`);
   });
 });

@@ -1,13 +1,13 @@
 /**
  * One WebGL 2 context for the page, however many stickers it has: each is drawn into it in turn and
  * copied onto its own canvas, so a page full of them never runs out of contexts (browsers allow
- * about sixteen). The shaders are compiled without holding up the page: with
- * `KHR_parallel_shader_compile` the page asks each frame whether they're done, which never waits;
- * without it, they're compiled once the page is idle, behind a fence. Until then, and where there's
+ * about sixteen). The shader is compiled without holding up the page: with
+ * `KHR_parallel_shader_compile` the page asks each frame whether it's done, which never waits;
+ * without it, it's compiled once the page is idle, behind a fence. Until then, and where there's
  * no WebGL 2, the stickers are drawn flat.
  */
 
-import { SCRATCH_FRAGMENT, STICKER_FRAGMENT, VERTEX } from "./shaders.ts";
+import { STICKER_FRAGMENT, VERTEX } from "./shaders.ts";
 
 /** The most device pixels across the shared canvas: a drawing bigger than this is drawn smaller and copied up. */
 export const MOST = 2048;
@@ -18,7 +18,6 @@ export type Stage = {
   gl: WebGL2RenderingContext;
   canvas: HTMLCanvasElement;
   sticker: Program;
-  scratch: Program;
   /** Counts the contexts made: textures made for an earlier one are gone. */
   generation: number;
   blank: WebGLTexture;
@@ -82,12 +81,11 @@ function prepare(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement) {
   const begin = () => {
     if (mine !== generation || gl.isContextLost()) return;
     const sticker = compile(gl, STICKER_FRAGMENT);
-    const scratch = compile(gl, SCRATCH_FRAGMENT);
-    if (!sticker || !scratch) return tell("unavailable");
+    if (!sticker) return tell("unavailable");
     gl.flush();
     const sync = parallel ? null : gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     const done = () => {
-      if (parallel) return [sticker, scratch].every((made) => gl.getProgramParameter(made.program, parallel.COMPLETION_STATUS_KHR));
+      if (parallel) return Boolean(gl.getProgramParameter(sticker.program, parallel.COMPLETION_STATUS_KHR));
       return !sync || gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED;
     };
     const wait = () => {
@@ -95,12 +93,11 @@ function prepare(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement) {
       if (!done()) return later(wait, false);
       if (sync) gl.deleteSync(sync);
       const stickerProgram = linked(gl, sticker);
-      const scratchProgram = linked(gl, scratch);
-      if (!stickerProgram || !scratchProgram) return tell("unavailable");
+      if (!stickerProgram) return tell("unavailable");
       const blank = gl.createTexture()!;
       gl.bindTexture(gl.TEXTURE_2D, blank);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
-      stage = { gl, canvas, sticker: stickerProgram, scratch: scratchProgram, generation: mine, blank };
+      stage = { gl, canvas, sticker: stickerProgram, generation: mine, blank };
       tell("ready");
     };
     later(wait, false);
@@ -127,10 +124,10 @@ function start() {
   prepare(gl, canvas);
 }
 
-/** Where the page's shaders stand. */
+/** Where the page's shader stands. */
 export const readinessNow = () => readiness;
 
-/** Calls `change` whenever the shaders' readiness changes, starting to make them ready if nothing has yet. Returns a function to stop. */
+/** Calls `change` whenever the shader's readiness changes, starting to make it ready if nothing has yet. Returns a function to stop. */
 export function watchStage(change: () => void) {
   watchers.add(change);
   start();
@@ -193,13 +190,16 @@ export type Uniform = number | boolean | readonly number[] | Float32Array;
 
 const contexts = new WeakMap<HTMLCanvasElement, CanvasRenderingContext2D | null>();
 
+/** The uniforms that are whole numbers: a finish and a pattern, by their place in their lists. */
+const INTEGERS = new Set(["uFinish", "uPattern"]);
+
 /**
- * Draws with `which` program into `target` (its own canvas, in device pixels): the uniforms set by
- * name (numbers, vectors, a 3×3 matrix as nine numbers), the textures bound in order to units 0 up.
+ * Draws a sticker into `target` (its own canvas, in device pixels): the uniforms set by name
+ * (numbers, vectors, a 3×3 matrix as nine numbers), the textures bound in order to units 0 up.
  * The drawing is made at the shared canvas's bottom left and copied before the browser clears it.
  * Returns false when it couldn't be drawn.
  */
-export function drawInto(s: Stage, which: "sticker" | "scratch", target: HTMLCanvasElement, uniforms: Record<string, Uniform>, textures: Record<string, WebGLTexture | null>): boolean {
+export function drawInto(s: Stage, target: HTMLCanvasElement, uniforms: Record<string, Uniform>, textures: Record<string, WebGLTexture | null>): boolean {
   const { gl, canvas } = s;
   let context = contexts.get(target);
   if (context === undefined) {
@@ -214,7 +214,7 @@ export function drawInto(s: Stage, which: "sticker" | "scratch", target: HTMLCan
     canvas.width = Math.min(MOST, Math.max(canvas.width, width));
     canvas.height = Math.min(MOST, Math.max(canvas.height, height));
   }
-  const program = s[which];
+  const program = s.sticker;
   gl.useProgram(program.program);
   gl.viewport(0, 0, width, height);
   gl.disable(gl.BLEND);
@@ -223,7 +223,7 @@ export function drawInto(s: Stage, which: "sticker" | "scratch", target: HTMLCan
     if (at === undefined || at === null) return;
     if (typeof value === "boolean") gl.uniform1f(at, value ? 1 : 0);
     else if (typeof value === "number") {
-      if (name === "uFinish") gl.uniform1i(at, value);
+      if (INTEGERS.has(name)) gl.uniform1i(at, value);
       else gl.uniform1f(at, value);
     } else if (value.length === 2) gl.uniform2fv(at, value as number[]);
     else if (value.length === 3) gl.uniform3fv(at, value as number[]);

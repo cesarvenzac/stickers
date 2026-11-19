@@ -138,36 +138,3 @@ export function pullToLift(grabAlong: number, extent: { least: number; most: num
   const a = grabAlong - extent.least + Math.PI * radius;
   return travel(a, radius);
 }
-
-/**
- * The corner of a convex hull nearest a point, and the way out of it: the bisector of its two
- * sides' outward normals. A fold along it, near that corner, lifts only a small cap round it: the
- * corner is the furthest of the whole shape that way. What a pointer lifts as it comes near.
- */
-export function cornerNear(hull: readonly Point[], point: Point): { corner: Point; outward: Point; distance: number } | null {
-  if (hull.length < 3) return null;
-  let middle = { x: 0, y: 0 };
-  for (const vertex of hull) middle = { x: middle.x + vertex.x / hull.length, y: middle.y + vertex.y / hull.length };
-  let best = 0;
-  for (let i = 1; i < hull.length; i++) if (Math.hypot(hull[i].x - point.x, hull[i].y - point.y) < Math.hypot(hull[best].x - point.x, hull[best].y - point.y)) best = i;
-  const at = hull[best];
-  const before = hull[(best + hull.length - 1) % hull.length];
-  const after = hull[(best + 1) % hull.length];
-  // Each side's normal, turned to face away from the middle.
-  const normal = (from: Point, to: Point) => {
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const length = Math.hypot(dx, dy) || 1;
-    let nx = dy / length;
-    let ny = -dx / length;
-    if (nx * (from.x - middle.x) + ny * (from.y - middle.y) < 0) {
-      nx = -nx;
-      ny = -ny;
-    }
-    return { x: nx, y: ny };
-  };
-  const a = normal(before, at);
-  const b = normal(at, after);
-  const length = Math.hypot(a.x + b.x, a.y + b.y) || 1;
-  return { corner: at, outward: { x: (a.x + b.x) / length, y: (a.y + b.y) / length }, distance: Math.hypot(at.x - point.x, at.y - point.y) };
-}

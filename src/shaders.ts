@@ -1,9 +1,8 @@
 /**
- * The shaders. One draws a sticker: every pixel is worked back to the point of the sheet seen there
- * (through the sheet's lift and tilt in perspective, then through the peel's curl, as `peel.ts`
- * works it out), shaded in its finish, edged by its die-cut, over the shadow it casts. The other
- * draws a scratch card's coating. They share the finishes: how paper, gloss, holographic foil,
- * glitter, brushed steel and glow-in-the-dark phosphor take the light.
+ * The shader. Every pixel is worked back to the point of the sheet seen there (through the sheet's
+ * lift and tilt in perspective, then through the peel's curl, as `peel.ts` works it out), shaded in
+ * its finish, edged by its die-cut, over the shadow it casts. The finishes are how paper, gloss,
+ * holographic foil (in its patterns), glitter and glow-in-the-dark phosphor take the light.
  *
  * Coordinates are the box's own: pixels, x right and y down from its top left corner, z up toward
  * the viewer. The light is a point above the pointer; shadows fall from a fixed light above and a
@@ -28,9 +27,12 @@ void main() {
 }`);
 
 /** Every finish, as `finish` takes them (and, by its place here, as the shader numbers them). */
-export const FINISHES = ["paper", "gloss", "holo", "glitter", "steel", "glow"] as const;
+export const FINISHES = ["paper", "gloss", "holo", "glitter", "glow"] as const;
 
-/** What both shaders share: noise, colour and the finishes. */
+/** How a holographic foil's grooves are laid, as `pattern` takes them (numbered by their place here). */
+export const PATTERNS = ["smooth", "lines", "squares", "dots", "shards"] as const;
+
+/** What the finishes need: noise, colour, the lights. */
 const SHARED = `
 precision highp float;
 
@@ -45,6 +47,7 @@ uniform vec4 uLight;    // the pointer's light: where (box pixels, its height) a
 uniform vec3 uKey;      // the room's light, a direction toward it
 uniform float uDark;    // 0 in a lit room, 1 with the lights off
 uniform int uFinish;
+uniform int uPattern;   // a holographic foil's
 uniform float uSeed;
 uniform float uCharge;  // the phosphor's glow
 uniform vec3 uGlow;     // and its colour
@@ -78,9 +81,9 @@ float torch(vec3 p) {
 }
 
 // How a finish takes the light. \`base\` is the art's colour on the white of the border, \`at\` the
-// point of the sheet (box pixels, flat), \`n\` the face's normal, \`p\` where it is, \`t\` the
-// direction the sheet runs (its x), \`ink\` how much of the art there is (0 on the border).
-vec3 finish(vec3 base, vec2 at, vec3 n, vec3 p, vec3 t, float ink, vec2 slope) {
+// point of the sheet (box pixels, flat), \`n\` the face's normal, \`p\` where it is, \`ink\` how much
+// of the art there is (0 on the border).
+vec3 finish(vec3 base, vec2 at, vec3 n, vec3 p, float ink) {
   vec3 toLight = normalize(uLight.xyz - p);
   vec3 h = normalize(toLight + VIEW);
   float nh = max(dot(n, h), 0.);
@@ -96,15 +99,89 @@ vec3 finish(vec3 base, vec2 at, vec3 n, vec3 p, vec3 t, float ink, vec2 slope) {
   }
 
   if (uFinish == 2) {
-    // Holographic foil: bands of the spectrum that run across it as the light and the sheet move,
-    // wavering, brightest where the art is light, glinting.
+    // Holographic foil: a diffraction grating. Its grooves send each colour of the light up at an
+    // angle of its own, so the spectrum runs across it as the light and the sheet move, brightest
+    // where the grooves lie square to the light and where the art is light. \`uPattern\` lays the
+    // grooves: one smooth wavering sheet, or lines, squares, dots or shards, each grooved its own way.
     vec3 from = normalize(mix(uKey, toLight, near));
-    float phase = dot(from.xy, vec2(.55, .85)) * 1.7 + dot(n.xy, vec2(.8, -.6)) * 2.2
+    // The light across the sheet, as the face sees it: tilted, it sees it from elsewhere.
+    vec2 toward = from.xy + n.xy * 1.6;
+    vec2 grooves = vec2(.55, .85);
+    float shift = 0.;
+    float seam = 0.;
+    float between = 0.;
+    if (uPattern == 1) {
+      // Lines: fine stripes, each grooved its own way, so they flash one by one.
+      float u = dot(at, vec2(.7071, -.7071)) / 2.6;
+      float stripe = floor(u);
+      float angle = .9 + (hash(vec2(stripe, uSeed)) - .5) * 1.5;
+      grooves = vec2(cos(angle), sin(angle));
+      shift = stripe * .012;
+      seam = smoothstep(.4, .5, abs(fract(u) - .5));
+    } else if (uPattern == 2) {
+      // Squares: a mosaic of small tiles, each grooved one of six ways.
+      vec2 q = at / 5.5 + uSeed;
+      vec2 tile = floor(q);
+      float angle = floor(hash(tile) * 6.) * PI / 6.;
+      grooves = vec2(cos(angle), sin(angle));
+      shift = hash(tile + 7.1) * .12;
+      vec2 f = abs(fract(q) - .5);
+      seam = smoothstep(.4, .5, max(f.x, f.y));
+    } else if (uPattern == 3) {
+      // Dots: small discs grooved in rings, so the light draws a bright spoke across each, every
+      // one turned toward it; the smooth foil between them.
+      vec2 q = at / 11.;
+      q.x += mod(floor(q.y), 2.) * .5;
+      vec2 f = fract(q) - .5;
+      float r = length(f);
+      grooves = r > 1e-4 ? f / r : vec2(1., 0.);
+      shift = r * .9;
+      between = smoothstep(.34, .4, r);
+      seam = smoothstep(.3, .37, r) * (1. - between);
+    } else if (uPattern == 4) {
+      // Shards: broken glass, each piece grooved its own way, its edges catching the light.
+      vec2 q = at / 14. + uSeed;
+      vec2 cell = floor(q);
+      vec2 f = fract(q);
+      float first = 9.;
+      float second = 9.;
+      vec2 piece = cell;
+      for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+          vec2 o = vec2(float(i), float(j));
+          vec2 d = o + vec2(hash(cell + o), hash(cell + o + 19.1)) - f;
+          float dd = dot(d, d);
+          if (dd < first) {
+            second = first;
+            first = dd;
+            piece = cell + o;
+          } else if (dd < second) second = dd;
+        }
+      }
+      float angle = hash(piece) * PI;
+      grooves = vec2(cos(angle), sin(angle));
+      shift = hash(piece + 4.3) * .3;
+      seam = 1. - smoothstep(0., .05, sqrt(second) - sqrt(first));
+    }
+    // The smooth foil: the spectrum in broad bands, wavering across the sheet.
+    float wave = dot(from.xy, vec2(.55, .85)) * 1.7 + dot(n.xy, vec2(.8, -.6)) * 2.2
       + (at.x + .6 * at.y) / side * 1.4 + noise(at / side * 3.5 + uSeed) * 1.1;
-    vec3 foil = rainbow(phase);
+    vec3 foil = rainbow(wave);
+    if (uPattern > 0) {
+      // A patch of grating shines its colour only with its grooves square to the light; turned
+      // away, it's silver. So the patches flash on and off as the light goes round.
+      float across = abs(dot(normalize(toward + 1e-4), grooves));
+      float phase = dot(toward, grooves) * 1.9 + shift + uSeed * .13;
+      vec3 silver = vec3(.5 + .32 * nh);
+      vec3 flash = mix(silver, rainbow(phase) * 1.06, smoothstep(.2, .9, across));
+      foil = mix(flash, mix(silver, foil, .6), between);
+    }
     float glance = .55 + .45 * pow(nh, 5.);
     float shows = mix(.45, 1., smoothstep(.1, .85, luma(base)));
     vec3 colour = mix(base * .92, base * .5 + foil * .62 * glance + .1, shows * .85) * lit;
+    // Seams between tiles and stripes sit a little darker; a shard's edge and a dot's rim catch the light.
+    if (uPattern == 1 || uPattern == 2) colour *= 1. - .1 * seam;
+    else colour += seam * (.04 + .16 * near * glance);
     vec2 sparkle = at * .45 + uSeed;
     vec2 grain = floor(sparkle);
     float glint = step(.985, hash(grain)) * (1. - smoothstep(.15, .45, length(fract(sparkle) - .5))) * pow(nh, 3.) * (.4 + near);
@@ -132,26 +209,6 @@ vec3 finish(vec3 base, vec2 at, vec3 n, vec3 p, vec3 t, float ink, vec2 slope) {
   }
 
   if (uFinish == 4) {
-    // Brushed steel: the art stamped into a metal plate, grey with a breath of its colour, fine
-    // lines brushed across it and a streak of light square to them that follows the light.
-    vec3 bumped = normalize(n - vec3(slope * 2.4, 0.));
-    float brushed = noise(vec2(at.x * .012, at.y * .9) + uSeed) * .6 + noise(vec2(at.x * .03, at.y * 2.3)) * .4;
-    vec3 metal = mix(vec3(luma(base)), base, .28) * .62 + .2;
-    float th = dot(t, h);
-    float streak = pow(sqrt(max(1. - th * th, 0.)), 90.);
-    float th2 = dot(t, normalize(uKey + VIEW));
-    float roomStreak = pow(sqrt(max(1. - th2 * th2, 0.)), 30.);
-    // The world the plate reflects: brighter above than below.
-    vec3 r = reflect(-VIEW, bumped);
-    float world = .7 + .3 * smoothstep(-.6, .6, -r.y);
-    float diffuse = .55 + .45 * max(dot(bumped, uKey), 0.);
-    vec3 colour = metal * diffuse * world * (.86 + .28 * brushed) * mix(1., .5, uDark);
-    vec3 highlight = (near * .4 * streak + .08 * roomStreak) * (.7 + .3 * brushed) * vec3(.97, .98, 1.);
-    // Bright where it catches the light, never blown out: the plate's colour still shows.
-    return colour + highlight * (1. - .5 * luma(colour)) + .9 * torch(p) * metal;
-  }
-
-  if (uFinish == 5) {
     // Glow in the dark: where it's light, phosphor. Pale in a lit room; with the lights off it
     // gives back the light it took in, bright, then dimmer as its charge runs down.
     float phosphor = smoothstep(.25, .9, luma(base));
@@ -303,15 +360,7 @@ void main() {
       } else {
         vec4 art = texture(uArt, uv);
         vec3 base = uBorder * (1. - art.a) + art.rgb;
-        vec2 inkSlope = vec2(0.);
-        if (uFinish == 4) {
-          // Steel: the art's own light and dark, read as a stamp's relief.
-          vec4 ax = texture(uArt, uv + vec2(1.4 / uBox.x, 0.));
-          vec4 ay = texture(uArt, uv + vec2(0., 1.4 / uBox.y));
-          float l0 = luma(base);
-          inkSlope = vec2(luma(uBorder * (1. - ax.a) + ax.rgb) - l0, luma(uBorder * (1. - ay.a) + ay.rgb) - l0) * 3.;
-        }
-        shaded = finish(base, layer.at, normal, where, axisX, art.a, inkSlope);
+        shaded = finish(base, layer.at, normal, where, art.a);
       }
       // What lies under the curl is in its shadow.
       if (curled && layer.height == 0.) shaded *= 1. - .4 * curlShadow(layer.at, k);
@@ -338,7 +387,7 @@ void main() {
     float strength = mix(.24, .16, clamp(height / max(uBox.x, uBox.y) * 3., 0., 1.));
     vec4 fall = vec4(0., 0., 0., shadow * strength);
     // A glowing sticker lights the page round it with the lights off.
-    if (uFinish == 5 && uDark > 0.) {
+    if (uFinish == 4 && uDark > 0.) {
       float beyond = max(cutAt(spot), 0.);
       float bloom = exp(-beyond / (.06 * max(uBox.x, uBox.y))) * uCharge * uDark * .5;
       fall = vec4(uGlow * bloom, bloom * .7) + fall * (1. - bloom * .7);
@@ -346,52 +395,4 @@ void main() {
     colour += (1. - colour.a) * fall;
   }
   outColor = colour * uOpacity;
-}`);
-
-export const SCRATCH_FRAGMENT = compact(`#version 300 es
-${SHARED}
-uniform sampler2D uMask;    // what's been scratched off: 1 where it has
-uniform vec3 uCoat;         // the coating's colour
-uniform sampler2D uPrint;   // what's printed on the coating, if anything
-uniform float uPrinted;
-uniform float uReveal;      // 0 to 1, the rest of the coating crumbling away
-uniform float uRadius;      // the card's corners
-
-float scratchedAt(vec2 at) {
-  float raw = texture(uMask, at / uBox).r;
-  // A coin leaves a ragged edge.
-  float rag = (noise(at * .45 + uSeed) - .5) * .5 + (noise(at * 1.3) - .5) * .25;
-  return smoothstep(.42, .58, raw + rag * (1. - raw) * raw * 4.);
-}
-
-float coatAt(vec2 at) {
-  float gone = scratchedAt(at);
-  float crumble = step(noise(at * .09 + uSeed * 3.) * .8 + noise(at * .5) * .2, uReveal * 1.15 - .05);
-  vec2 corner = max(abs(at - uBox * .5) - (uBox * .5 - uRadius), 0.);
-  float inside = clamp(uRadius + .5 - length(corner), 0., 1.);
-  return (1. - gone) * (1. - crumble) * inside;
-}
-
-void main() {
-  vec2 q = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y) / uScale - uMargin;
-  float coat = coatAt(q);
-  vec3 p = vec3(q, 0.);
-  if (coat > .001) {
-    // The coating's raised edge where it's been scratched: its slope tilts the face.
-    vec2 e = vec2(1.5, 0.);
-    vec2 slope = vec2(coatAt(q + e) - coatAt(q - e), coatAt(q + e.yx) - coatAt(q - e.yx)) / 3.;
-    vec3 normal = normalize(vec3(-slope * 1.6, 1.));
-    vec3 base = uCoat;
-    if (uPrinted > .5) {
-      vec4 ink = texture(uPrint, q / uBox);
-      base = base * (1. - ink.a) + ink.rgb;
-    }
-    vec3 shaded = finish(base, q, normal, p, vec3(1., 0., 0.), 0., vec2(0.));
-    outColor = vec4(shaded * coat, coat);
-    return;
-  }
-  // Where it's scratched, the coating's edge casts a hair of shadow on what it uncovered.
-  vec2 k = uKey.xy / max(uKey.z, .2);
-  float shade = coatAt(q + k * 2.2) * .22 + coatAt(q + k * 1.1) * .12;
-  outColor = vec4(0., 0., 0., shade);
 }`);

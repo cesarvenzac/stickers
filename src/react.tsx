@@ -3,19 +3,17 @@
 /**
  * Stickers in React:
  *
- *   import { Scratch, Sticker } from "@cesarvenzac/stickers/react";
+ *   import { Sticker } from "@cesarvenzac/stickers/react";
  *
  *   <Sticker src="/heart.svg" finish="holo" label="A heart" style={{ width: 160, height: 160 }} />
- *   <Scratch print="Scratch here" onReveal={…}>You won</Scratch>
  *
  * A server draws a sticker's art as it is, with a border made of drop shadows, which the drawing
  * takes over once the browser has it. Give a sticker a size: its art is fitted inside.
  */
 
-import { type CSSProperties, type HTMLAttributes, type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import { type CSSProperties, type HTMLAttributes, useEffect, useLayoutEffect, useRef } from "react";
 
 import type { Source } from "./art.ts";
-import { scratch, type ScratchCard, type ScratchOptions } from "./scratch.ts";
 import { sticker, type Sticker as Handle, type StickerOptions } from "./sticker.ts";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -42,6 +40,7 @@ export function Sticker({
   src,
   handle,
   finish,
+  pattern,
   label,
   outline,
   smooth,
@@ -67,7 +66,7 @@ export function Sticker({
 }: StickerProps) {
   const ref = useRef<HTMLDivElement>(null);
   const made = useRef<Handle | null>(null);
-  const options: StickerOptions = { finish, label, outline, smooth, border, back, print, peel, drag, bounds, dark, glow, curl, comesOff, shine, seed, reducedMotion };
+  const options: StickerOptions = { finish, pattern, label, outline, smooth, border, back, print, peel, drag, bounds, dark, glow, curl, comesOff, shine, seed, reducedMotion };
   const calls = useRef({ onPeel, onPick, onDrop, handle });
   const latest = useRef({ src, options });
   // Before the effects below read them: the callbacks and options of this render.
@@ -124,50 +123,6 @@ export function Sticker({
           </span>
         )
       ) : null}
-    </div>
-  );
-}
-
-export type ScratchProps = ScratchOptions &
-  HTMLAttributes<HTMLDivElement> & {
-    children?: ReactNode;
-    /** Called with the card once it's made, and with null once it's gone: for `reveal()` and `reset()`. */
-    handle?: (card: ScratchCard | null) => void;
-  };
-
-/** A `<div>` holding `children` under a coating to scratch off. */
-export function Scratch({ children, handle, finish, coat, print, brush, revealAt, radius, label, dark, shine, seed, reducedMotion, onScratch, onReveal, style, ...rest }: ScratchProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const made = useRef<ScratchCard | null>(null);
-  const options: ScratchOptions = { finish, coat, print, brush, revealAt, radius, label, dark, shine, seed, reducedMotion };
-  const calls = useRef({ onScratch, onReveal, handle });
-  const latest = useRef(options);
-  useIsomorphicLayoutEffect(() => {
-    calls.current = { onScratch, onReveal, handle };
-    latest.current = options;
-  });
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    const card = scratch(element, { ...latest.current, onScratch: (share) => calls.current.onScratch?.(share), onReveal: () => calls.current.onReveal?.() });
-    made.current = card;
-    calls.current.handle?.(card);
-    return () => {
-      calls.current.handle?.(null);
-      card.destroy();
-      made.current = null;
-    };
-  }, []);
-
-  const key = JSON.stringify(options);
-  useEffect(() => {
-    made.current?.set(latest.current);
-  }, [key]);
-
-  return (
-    <div ref={ref} {...rest} style={style}>
-      {children}
     </div>
   );
 }
