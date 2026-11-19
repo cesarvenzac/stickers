@@ -1,0 +1,30 @@
+#!/bin/sh
+# What someone installing the package gets, before it's published (npm run check): builds it,
+# packs it as npm would, installs the tarball in two throwaway projects (TypeScript resolving it
+# as NodeNext and as a bundler does), React beside it, and typechecks and runs check/consumer.ts
+# there.
+set -eu
+package=$(cd "$(dirname "$0")/.." && pwd)
+# The package's own TypeScript, or the one above it when it's developed inside the site.
+tsc=$(cd "$package" && node -p 'require.resolve("typescript/bin/tsc")')
+# React for the react entry, at the versions the package is developed against (its lockfile's).
+# From npm's cache when it has them, else the registry: a fresh cache, as CI's is, holds the
+# lockfile's tarballs but nothing to resolve a version by.
+react=$(cd "$package" && node -p 'const lock = require("./package-lock.json").packages; ["react", "react-dom", "@types/react", "@types/react-dom"].map((name) => name + "@" + lock["node_modules/" + name].version).join(" ")')
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+(cd "$package" && npm run build --silent && npm pack --silent --pack-destination "$work" >/dev/null)
+tarball=$(ls "$work"/*.tgz)
+echo "Packed $(basename "$tarball"): $(tar -tzf "$tarball" | sed 's|^package/||' | tr '\n' ' ')"
+
+for resolution in NodeNext bundler; do
+  project="$work/$resolution"
+  mkdir -p "$project"
+  cp "$package/check/consumer.ts" "$project/consumer.ts"
+  module=$([ "$resolution" = NodeNext ] && echo NodeNext || echo ESNext)
+  printf '{"type":"module","private":true}\n' > "$project/package.json"
+  printf '{"compilerOptions":{"module":"%s","moduleResolution":"%s","target":"ES2022","strict":true,"skipLibCheck":false,"types":[],"outDir":"out"},"files":["consumer.ts"]}\n' "$module" "$resolution" > "$project/tsconfig.json"
+  # shellcheck disable=SC2086 # one word a package
+  (cd "$project" && npm install --silent --no-audit --no-fund --prefer-offline "$tarball" $react && node "$tsc" -p . && node out/consumer.js | sed "s/^/$resolution: /" | cut -c1-120)
+done

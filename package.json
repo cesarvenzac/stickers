@@ -1,0 +1,76 @@
+{
+  "name": "@cesarvenzac/stickers",
+  "version": "0.1.0",
+  "description": "Stickers for the web: die-cut from any picture, peeled from any edge on a curl, picked up and stuck down elsewhere, scratched off, and lit by the pointer in finishes of paper, gloss, holographic foil, glitter, brushed steel and glow-in-the-dark. One WebGL 2 shader, no dependencies.",
+  "keywords": [
+    "sticker",
+    "stickers",
+    "peel",
+    "page-curl",
+    "scratch-card",
+    "scratch-off",
+    "drag-and-drop",
+    "holographic",
+    "holo",
+    "foil",
+    "glitter",
+    "brushed-metal",
+    "glow-in-the-dark",
+    "phosphorescent",
+    "dark-mode",
+    "shader",
+    "webgl",
+    "webgl2",
+    "react"
+  ],
+  "homepage": "https://cesarvenzac.com/stickers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cesarvenzac/stickers.git"
+  },
+  "bugs": "https://github.com/cesarvenzac/stickers/issues",
+  "author": "César Venzac (https://cesarvenzac.com)",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "sh check/run.sh",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

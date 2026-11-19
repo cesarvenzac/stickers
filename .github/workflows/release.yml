@@ -1,0 +1,94 @@
+# Publishes to npm when main carries a version that isn't there yet (a release is a version
+# bump), then tags it v<version> and makes it a GitHub release, its notes the version's section of
+# CHANGELOG.md. Through npm's trusted publishing: npm trusts this workflow in this repository, so
+# there's no token, and every release says where and how it was built (provenance). npm only
+# trusts a workflow for a package that exists, so the first version is published with a
+# short-lived token, the NPM_TOKEN secret, and waits for it. It can be run by hand too, say once
+# that token is in place; run by hand, it also brings the version's release notes up to date.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later, whatever Node bundles.
+      - run: npm install --global npm@11
+      - name: Is this version on npm yet?
+        id: release
+        env:
+          HAS_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
+            echo "::notice::$name@$version is on npm already"
+          elif ! npm view "$name" name >/dev/null 2>&1 && [ "$HAS_TOKEN" != true ]; then
+            echo "::notice::$name's first version waits for the NPM_TOKEN secret"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.release.outputs.publish == 'true'
+        run: npm ci
+      - if: steps.release.outputs.publish == 'true'
+        run: npm run typecheck
+      - if: steps.release.outputs.publish == 'true'
+        run: npm test
+      - if: steps.release.outputs.publish == 'true'
+        run: npm run check
+      - if: steps.release.outputs.publish == 'true'
+        run: npm publish --provenance
+        env:
+          # The first version's token, while there is one; otherwise setup-node's own placeholder.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || env.NODE_AUTH_TOKEN }}
+      - if: steps.release.outputs.publish == 'true'
+        name: Tag the version
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+      - if: steps.release.outputs.publish == 'true' || github.event_name == 'workflow_dispatch'
+        name: Say what it brings
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          # Run by hand once the version is tagged, it brings that release's notes up to date.
+          git ls-remote --exit-code --tags origin "v$VERSION" > /dev/null || exit 0
+          # The version's section of the changelog, its heading left out, a paragraph or an item to
+          # a line: GitHub breaks a release's notes wherever their lines break.
+          awk -v version="$VERSION" '/^## / { if (found) exit; found = ($2 == version); next } found' CHANGELOG.md |
+            awk 'function flush() { if (line != "") print line; line = "" }
+              /^```/ { flush(); print; code = !code; next }
+              code { print; next }
+              /^(#|$)/ { flush(); print; next }
+              /^([-*] |[0-9]+\. )/ { flush(); line = $0; next }
+              { sub(/^ +/, ""); line = line == "" ? $0 : line " " $0 }
+              END { flush() }' > "$RUNNER_TEMP/notes.md"
+          [ -s "$RUNNER_TEMP/notes.md" ] || echo "What changed is in the [changelog](https://github.com/$GITHUB_REPOSITORY/blob/main/CHANGELOG.md)." > "$RUNNER_TEMP/notes.md"
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            gh release edit "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "v$VERSION" --title "$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
+          fi

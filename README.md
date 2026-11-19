@@ -1,0 +1,114 @@
+# @cesarvenzac/stickers
+
+Stickers for the web. Any picture, die-cut with a border round its outline; peeled from any edge
+on a curl, its back showing, and laid back down, or peeled off and stuck down somewhere else;
+picked up and moved, swinging from the point it's held by; and lit by the pointer in its finish:
+paper, gloss, holographic foil, glitter, brushed steel, or phosphor that glows when the page goes
+dark. And scratch cards, coated in the same finishes.
+
+The docs, with live examples, are at [cesarvenzac.com/stickers](https://cesarvenzac.com/stickers).
+
+```sh
+npm install @cesarvenzac/stickers
+```
+
+## Use
+
+```ts
+import { sticker } from "@cesarvenzac/stickers";
+
+const heart = sticker(document.querySelector(".heart")!, "/heart.svg", { finish: "holo", drag: true });
+```
+
+In React:
+
+```tsx
+import { Scratch, Sticker } from "@cesarvenzac/stickers/react";
+
+<Sticker src="/heart.svg" finish="holo" drag label="A heart" className="size-40" />
+<Scratch print="Scratch here" onReveal={() => setWon(true)}>You won</Scratch>
+```
+
+The element is the sticker's box: give it a size, and the picture is fitted inside, a border grown
+round it. `src` is an image's address (its pixels are read to cut round it, so one from another
+site needs CORS), SVG markup (whose `var(--…)` and `currentColor` are read on the sticker's
+element, so it can be painted in your page's tokens), or anything a canvas draws.
+
+## What it does
+
+- **A die-cut.** What's half opaque or more is the art; the border (`outline`) is grown round it,
+  gaps narrower than `smooth` closed and holes filled, as a kiss-cut follows a drawing. Measured
+  as a distance field from the art's own anti-aliased edge, so the cut is sharp at any size.
+- **A peel.** Pressed near an edge, the sheet rolls up round a cylinder from that point, its back
+  showing (`back`, with `print` across it), its shadow falling on what's still stuck, and the
+  point held stays under the pointer. Pointed at, an edge lifts a little. Let go before half way
+  (`comesOff`) and it lies back down on a spring; past it, it comes off: away (`onPeel`, then
+  `restore()`), or into your hand with `drag`.
+- **Picked up and stuck down.** With `drag`, a press on it lifts it toward you, its shadow growing,
+  and it follows the point you hold it by, swinging round behind it as a card dragged across a
+  table does, tilting as it goes; let go and it's pressed down there. `onDrop` says where (`place`,
+  moved and turned from where the page laid it out), and `place` puts it back. It stays inside its
+  parent unless `bounds` says otherwise, and moves with `translate` and `rotate`, so a `transform`
+  of your own stays yours.
+- **Six finishes.** `paper`; `gloss`, a laminate's highlight; `holo`, holographic foil, the
+  spectrum running across it as the light moves; `glitter`, flakes catching the light one by one;
+  `steel`, brushed, the art stamped into the plate; `glow`, glow in the dark. The light is a point
+  above the pointer, and each sticker's `seed` picks its own pattern.
+- **The lights off.** `dark` follows the page unless said: a `dark` or `light` class on the root,
+  a `data-theme`, `data-mode` or `data-color-scheme`, a `color-scheme` of dark alone, and
+  otherwise the system's setting. Every sticker dims and the pointer becomes a torch; a `glow`
+  sticker gives back the light it took in, bright at first and fading as phosphor does, half in
+  twelve seconds, and the torch charges it again.
+- **Scratch cards.** `scratch(element)` coats whatever an element holds in a finish (`steel`
+  unless said) to be scratched off with a coin's ragged edge, flakes falling, the share counted
+  (`onScratch`); past `revealAt`, the rest crumbles away (`onReveal`).
+- **For everyone.** A sticker is an image named by `label`; the arrow keys move one that can be
+  moved and Enter peels off one that can't. A scratch card is a button until it's revealed, by
+  Enter too. Under reduced motion nothing swings, tilts or bounces.
+- **One shader.** Every sticker on a page is drawn by one WebGL 2 context and copied onto its own
+  canvas, so a page full of them never runs out of contexts; the shader is compiled without
+  holding up the page. Where there's no WebGL 2, a sticker is drawn flat; in React, a server draws
+  the picture with a border of drop shadows until the canvas takes over.
+
+## API
+
+```ts
+function sticker(element: HTMLElement, src: Source, options?: StickerOptions): Sticker;
+function scratch(element: HTMLElement, options?: ScratchOptions): ScratchCard;
+
+type Sticker = {
+  readonly element: HTMLElement;
+  readonly place: Place; // { x, y, angle }
+  readonly state: "loading" | "resting" | "peeling" | "held" | "off";
+  set(options: StickerOptions & { src?: Source }): void;
+  peelOff(): void;
+  restore(): void;
+  destroy(): void;
+};
+
+type ScratchCard = {
+  readonly element: HTMLElement;
+  readonly share: number;
+  readonly revealed: boolean;
+  reveal(): void;
+  reset(): void;
+  set(options: ScratchOptions): void;
+  destroy(): void;
+};
+```
+
+`StickerOptions`: `finish`, `label`, `outline`, `smooth`, `border`, `back`, `print`, `peel`
+(true), `drag` (false), `bounds`, `dark` (`"auto"`), `glow`, `curl`, `comesOff` (0.5), `shine`
+(true), `place`, `seed`, `reducedMotion`, `onPeel`, `onPick`, `onDrop`.
+
+`ScratchOptions`: `finish` (`"steel"`), `coat`, `print`, `brush`, `revealAt` (0.5), `radius`,
+`label`, `dark`, `shine`, `seed`, `reducedMotion`, `onScratch`, `onReveal`.
+
+React's `Sticker` and `Scratch` take every option as a prop, `handle` for the `Sticker` or
+`ScratchCard` made, and the rest as the `<div>`'s.
+
+Each option, with examples: [cesarvenzac.com/stickers/docs/api](https://cesarvenzac.com/stickers/docs/api).
+
+## Licence
+
+MIT
