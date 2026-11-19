@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- The README's loop is sharper: moving shapes no longer leave pixels behind them.
+
 ## 0.2.0
 
 - Holographic patterns. `pattern` lays a holographic foil's grooves: `smooth` (the foil as it was, the default), `lines`, `squares`, `dots` or `shards`. The foil is drawn as a diffraction grating: each line, tile, dot or shard flashes its colour as the light comes square to its grooves and is silver otherwise; a dot, grooved in rings, draws a bright spoke turned to the light. `PATTERNS` lists them.

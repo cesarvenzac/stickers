@@ -6,7 +6,7 @@ picked up and moved, swinging from the point it's held by; and lit by the pointe
 paper, gloss, holographic foil in five patterns, glitter, or phosphor that glows when the page goes
 dark.
 
-[![Six stickers on a board, a heart, a star in glitter, a holographic lightning bolt, a cloud, a badge in holographic dots and a moon: the foils flash as the pointer passes, the bolt is peeled from its tip, its printed back showing, and laid back down, and the heart is picked up by its middle, swung round and put back](https://cesarvenzac.com/media/1278ce53-8c82-439a-b65a-d37c828234d1.webp)](https://cesarvenzac.com/stickers)
+[![Six stickers on a board, a heart, a star in glitter, a holographic lightning bolt, a cloud, a badge in holographic dots and a moon: the foils flash as the pointer passes, the bolt is peeled from its tip, its printed back showing, and laid back down, and the heart is picked up by its middle, swung round and put back](https://cesarvenzac.com/media/82114ae1-43be-4931-895e-99bd3cbce943.webp)](https://cesarvenzac.com/stickers)
 
 The docs, with live examples, are at [cesarvenzac.com/stickers](https://cesarvenzac.com/stickers).
 
