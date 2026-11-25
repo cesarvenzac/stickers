@@ -1,6 +1,6 @@
 {
   "name": "@cesarvenzac/stickers",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Stickers for the web: die-cut from any picture, peeled from any edge on a curl, picked up and stuck down elsewhere, and lit by the pointer in finishes of paper, gloss, holographic foil in five patterns, glitter and glow-in-the-dark. One WebGL 2 shader, no dependencies.",
   "keywords": [
     "sticker",

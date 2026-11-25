@@ -54,7 +54,7 @@ element, so it can be painted in your page's tokens), or anything a canvas draws
 - **Five finishes.** `paper`; `gloss`, a laminate's highlight; `holo`, holographic foil, the
   spectrum running across it as the light moves; `glitter`, flakes catching the light one by one;
   `glow`, glow in the dark. The light is a point above the pointer, and each sticker's `seed`
-  picks its own pattern.
+  varies its glints, so two in the same finish don't glint alike.
 - **Holographic patterns.** The foil is a diffraction grating, and `pattern` lays its grooves:
   `smooth` (broad wavering bands, the default), `lines`, `squares`, `dots` (each disc grooved in
   rings, a bright spoke turned to the light) or `shards` (broken glass). Each patch shines its
@@ -76,24 +76,30 @@ element, so it can be painted in your page's tokens), or anything a canvas draws
 ```ts
 function sticker(element: HTMLElement, src: Source, options?: StickerOptions): Sticker;
 
+// An image's address, SVG markup, or anything a canvas draws.
+type Source = string | CanvasImageSource;
+
 type Sticker = {
   readonly element: HTMLElement;
   readonly place: Place; // { x, y, angle }
-  readonly state: "loading" | "resting" | "peeling" | "held" | "off";
+  readonly state: StickerState; // "loading" | "resting" | "peeling" | "held" | "off"
   set(options: StickerOptions & { src?: Source }): void;
   peelOff(): void;
   restore(): void;
   destroy(): void;
 };
 
+const FINISHES = ["paper", "gloss", "holo", "glitter", "glow"]; // type Finish
+const PATTERNS = ["smooth", "lines", "squares", "dots", "shards"]; // type Pattern
 ```
 
-`StickerOptions`: `finish`, `pattern`, `label`, `outline`, `smooth`, `border`, `back`, `print`, `peel`
-(true), `drag` (false), `bounds`, `dark` (`"auto"`), `glow`, `curl`, `comesOff` (0.5), `shine`
-(true), `place`, `seed`, `reducedMotion`, `onPeel`, `onPick`, `onDrop`.
+`StickerOptions`, each with its default where it has one: `finish` (`"gloss"`), `pattern`
+(`"smooth"`), `label`, `outline`, `smooth`, `border`, `back`, `print`, `peel` (true), `drag`
+(false), `bounds`, `dark` (`"auto"`), `glow`, `curl`, `comesOff` (0.5), `shine` (true), `place`,
+`seed`, `reducedMotion`, `onPeel`, `onPick`, `onDrop`.
 
-React's `Sticker` takes every option as a prop, `handle` for the `Sticker` made, and the rest as
-the `<div>`'s.
+React's `Sticker` (`StickerProps`) takes every option as a prop, `src`, `handle` for the `Sticker`
+made, and the rest as the `<div>`'s, but children.
 
 Each option, with examples: [cesarvenzac.com/stickers/docs/api](https://cesarvenzac.com/stickers/docs/api).
 

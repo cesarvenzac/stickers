@@ -58,7 +58,7 @@ export type StickerOptions = {
   shine?: boolean;
   /** Where it sits, moved and turned from where the page laid it out. */
   place?: Place;
-  /** Picks its pattern: two stickers in the same finish with different seeds glint differently. */
+  /** Varies its glints: two stickers in the same finish and pattern with different seeds glint differently. */
   seed?: number;
   /** Whether to move less: no swing, no bounce. Follows the visitor's setting unless said. */
   reducedMotion?: boolean;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- The README names everything the package exports: `FINISHES`, `PATTERNS`, the `Source`, `Finish`, `Pattern` and `StickerState` types, React's `StickerProps` (every option, `src` and `handle`, and the `<div>`'s own props but children), and the defaults of `finish` (`"gloss"`) and `pattern` (`"smooth"`).
+- `seed` is described as what it does: it varies a sticker's glints, so two in the same finish don't glint alike. It never chose the pattern, which is `pattern`'s since 0.2.0.
+
 ## 0.2.1
 
 - The README's loop is sharper: moving shapes no longer leave pixels behind them.
