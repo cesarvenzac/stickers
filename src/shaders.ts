@@ -235,11 +235,13 @@ uniform sampler2D uPrint;   // what's printed on the back, if anything
 uniform float uPrinted;
 uniform vec4 uFold;         // the peel's fold: a point on it and the direction across it, flat
 uniform float uRadius;      // the curl's radius
+uniform vec2 uBend;         // how the fold bends: its front bowed back from the point held, its curl tighter along it (peel.ts)
 uniform mat3 uTurn;         // how the sheet is turned: its x, y and up
 uniform vec3 uLift;         // where its middle is (box pixels) and how high
 uniform float uEye;         // how far above the eye is, box pixels: perspective
 uniform float uThick;       // how thick the sheet is, for the shadow it casts lying down
 uniform float uOpacity;
+uniform vec2 uDome;         // a puffy sticker's dome: how high it stands and its rim, box pixels (0 high: flat)
 
 float cutAt(vec2 at) {
   // Outside the box, the field's edge plus how far out: the shape lies within the box.
@@ -253,15 +255,40 @@ vec2 cutSlope(vec2 at) {
   return vec2(cutAt(at + e) - cutAt(at - e), cutAt(at + f) - cutAt(at - f)) / (2. * vec2(e.x, f.y));
 }
 
+// How far in from the cut's outer edge a point is, box pixels: what a puffy sticker's dome rises over.
+float depthAt(vec2 at) {
+  return texture(uField, clamp(at, vec2(0.), uBox) / uBox).g * uFieldScale;
+}
+
+// The dome's slope at a point, as the face's tilt across the sheet: steep at the edge, level from
+// the rim in, the same curve as dome.ts's \`slopeAt\`.
+vec2 domeTilt(vec2 at) {
+  vec2 e = vec2(uBox.x / uFieldSize.x, 0.);
+  vec2 f = vec2(0., uBox.y / uFieldSize.y);
+  vec2 inward = vec2(depthAt(at + e) - depthAt(at - e), depthAt(at + f) - depthAt(at - f)) / (2. * vec2(e.x, f.y));
+  float u = clamp(depthAt(at) / uDome.y, 0., 1.);
+  return -inward * 3. * uDome.x / uDome.y * (1. - u) * (1. - u);
+}
+
 // The layers that can be seen at a flat point of the sheet, top first, at most two: the point of
 // the sheet each is, which face, the face's normal on the sheet, its height above the sheet, and
 // how much it's squeezed toward the viewer.
 struct Layer { vec2 at; float back; vec3 normal; float height; float squeeze; };
 
+// Where a flat point stands against the fold, bent: how far past its front, and the curl's radius
+// there. peel.ts's \`foldAt\`.
+vec2 foldAt(vec2 spot) {
+  vec2 n = uFold.zw;
+  vec2 d = spot - uFold.xy;
+  float t = dot(d, vec2(-n.y, n.x));
+  return vec2(dot(d, n) - uBend.x * t * t, uRadius / (1. + uBend.y * abs(t)));
+}
+
 int layersAt(vec2 spot, out Layer layers[2]) {
   vec2 n = uFold.zw;
-  float s = dot(spot - uFold.xy, n);
-  float r = uRadius;
+  vec2 bent = foldAt(spot);
+  float s = bent.x;
+  float r = bent.y;
   if (s <= 0.) {
     layers[0] = Layer(spot + (PI * r - 2. * s) * n, 1., vec3(0., 0., 1.), 2. * r, 1.);
     layers[1] = Layer(spot, 0., vec3(0., 0., 1.), 0., 1.);
@@ -286,15 +313,16 @@ float materialAt(vec2 at, float soft) {
 // way toward the room's light across the sheet, a unit of height.
 float curlShadow(vec2 spot, vec2 k) {
   vec2 n = uFold.zw;
-  float r = uRadius;
+  vec2 here = foldAt(spot);
+  float r = here.y;
   float shade = 0.;
   // The part folded flat, 2r up: its own shape, softened by its height.
   vec2 high = spot + k * 2. * r;
-  float s = dot(high - uFold.xy, n);
-  if (s <= 0.) shade = materialAt(high + (PI * r - 2. * s) * n, 1. + r * .9);
+  vec2 above = foldAt(high);
+  if (above.x <= 0.) shade = materialAt(high + (PI * above.y - 2. * above.x) * n, 1. + above.y * .9);
   // The curl: a soft band where it stands, cast away from the light, wherever the sheet goes on
   // past the line there.
-  float s0 = dot(spot - uFold.xy, n);
+  float s0 = here.x;
   float toward = dot(k, n);
   float centre = r * .5 - toward * r;
   float width = r * (1. + abs(toward));
@@ -341,6 +369,8 @@ void main() {
       if (cover <= 0.) continue;
       float back = abs(layer.back - flipped);
       vec3 onSheet = layer.normal;
+      // A puffy sticker's face is domed; its back is flat.
+      if (uDome.x > 0. && back < .5) onSheet = normalize(onSheet + vec3(domeTilt(layer.at), 0.));
       // The cut's rounded edge: the face tilts out over its last pixels.
       if (cut > -2.5 * pixel) onSheet = normalize(onSheet + vec3(cutSlope(layer.at) * smoothstep(-2.5 * pixel, 0., cut) * .9, 0.));
       vec3 normal = normalize(axisX * onSheet.x + axisY * onSheet.y + up * onSheet.z);
@@ -360,6 +390,15 @@ void main() {
       } else {
         vec4 art = texture(uArt, uv);
         vec3 base = uBorder * (1. - art.a) + art.rgb;
+        // A torn edge shows the paper inside: white and rough, wider here and there where its
+        // fibres pulled out, and none of the finish's shine.
+        float torn = texture(uField, clamp(layer.at, vec2(0.), uBox) / uBox).b * uFieldScale;
+        if (torn < 6.) {
+          float fibres = noise(layer.at * .8 + uSeed) + .5 * noise(layer.at * 2.6 - uSeed);
+          float rim = 1. - smoothstep(.5 + fibres * .7, 1.3 + fibres * 1.3, torn);
+          base = mix(base, vec3(.97, .96, .93), rim);
+          art.a *= 1. - rim;
+        }
         shaded = finish(base, layer.at, normal, where, art.a);
       }
       // What lies under the curl is in its shadow.
@@ -381,14 +420,15 @@ void main() {
     float soft = 1.2 + height * .4;
     float shadow;
     if (folded()) {
-      float lying = dot(at - uFold.xy, uFold.zw) <= 0. ? materialAt(at, soft) : 0.;
+      float lying = foldAt(at).x <= 0. ? materialAt(at, soft) : 0.;
       shadow = max(lying, curlShadow(at, k));
     } else shadow = materialAt(at, soft);
     float strength = mix(.24, .16, clamp(height / max(uBox.x, uBox.y) * 3., 0., 1.));
     vec4 fall = vec4(0., 0., 0., shadow * strength);
     // A glowing sticker lights the page round it with the lights off.
     if (uFinish == 4 && uDark > 0.) {
-      float beyond = max(cutAt(spot), 0.);
+      // From what still lies on the page: where it's been peeled away, the page isn't lit.
+      float beyond = max(folded() ? max(cutAt(spot), foldAt(spot).x) : cutAt(spot), 0.);
       float bloom = exp(-beyond / (.06 * max(uBox.x, uBox.y))) * uCharge * uDark * .5;
       fall = vec4(uGlow * bloom, bloom * .7) + fall * (1. - bloom * .7);
     }

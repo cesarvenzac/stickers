@@ -1,7 +1,7 @@
 {
   "name": "@cesarvenzac/stickers",
-  "version": "0.2.2",
-  "description": "Stickers for the web: die-cut from any picture, peeled from any edge on a curl, picked up and stuck down elsewhere, and lit by the pointer in finishes of paper, gloss, holographic foil in five patterns, glitter and glow-in-the-dark. One WebGL 2 shader, no dependencies.",
+  "version": "1.0.0",
+  "description": "Stickers for the web: die-cut from any picture, peeled from any edge on a curl, torn when yanked, picked up and stuck down elsewhere, domed or flat, and lit by the pointer in finishes of paper, gloss, holographic foil in five patterns, glitter and glow-in-the-dark. One WebGL 2 shader, no dependencies; React, Svelte, Vue or a custom element.",
   "keywords": [
     "sticker",
     "stickers",
@@ -18,7 +18,14 @@
     "shader",
     "webgl",
     "webgl2",
-    "react"
+    "react",
+    "puffy",
+    "epoxy",
+    "tear",
+    "custom-element",
+    "web-component",
+    "svelte",
+    "vue"
   ],
   "homepage": "https://cesarvenzac.com/stickers",
   "repository": {
@@ -29,7 +36,10 @@
   "author": "César Venzac (https://cesarvenzac.com)",
   "license": "MIT",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/element.js",
+    "./src/element.ts"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -38,6 +48,18 @@
     "./react": {
       "types": "./dist/react.d.ts",
       "default": "./dist/react.js"
+    },
+    "./element": {
+      "types": "./dist/element.d.ts",
+      "default": "./dist/element.js"
+    },
+    "./svelte": {
+      "types": "./dist/svelte.d.ts",
+      "default": "./dist/svelte.js"
+    },
+    "./vue": {
+      "types": "./dist/vue.d.ts",
+      "default": "./dist/vue.js"
     },
     "./package.json": "./package.json"
   },

@@ -14,6 +14,7 @@
 import { type CSSProperties, type HTMLAttributes, useEffect, useLayoutEffect, useRef } from "react";
 
 import type { Source } from "./art.ts";
+import { type StickerWords, WORDS } from "./keys.ts";
 import { sticker, type Sticker as Handle, type StickerOptions } from "./sticker.ts";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -49,6 +50,9 @@ export function Sticker({
   print,
   peel,
   drag,
+  tear,
+  puffy,
+  touch,
   bounds,
   dark,
   glow,
@@ -58,7 +62,10 @@ export function Sticker({
   place,
   seed,
   reducedMotion,
+  announce,
+  words,
   onPeel,
+  onTear,
   onPick,
   onDrop,
   style,
@@ -66,12 +73,12 @@ export function Sticker({
 }: StickerProps) {
   const ref = useRef<HTMLDivElement>(null);
   const made = useRef<Handle | null>(null);
-  const options: StickerOptions = { finish, pattern, label, outline, smooth, border, back, print, peel, drag, bounds, dark, glow, curl, comesOff, shine, seed, reducedMotion };
-  const calls = useRef({ onPeel, onPick, onDrop, handle });
+  const options: StickerOptions = { finish, pattern, label, outline, smooth, border, back, print, peel, drag, tear, puffy, touch, bounds, dark, glow, curl, comesOff, shine, seed, reducedMotion, announce };
+  const calls = useRef({ onPeel, onTear, onPick, onDrop, handle, words });
   const latest = useRef({ src, options });
   // Before the effects below read them: the callbacks and options of this render.
   useIsomorphicLayoutEffect(() => {
-    calls.current = { onPeel, onPick, onDrop, handle };
+    calls.current = { onPeel, onTear, onPick, onDrop, handle, words };
     latest.current = { src, options };
   });
 
@@ -82,8 +89,13 @@ export function Sticker({
       ...latest.current.options,
       place,
       onPeel: () => calls.current.onPeel?.(),
+      onTear: () => calls.current.onTear?.(),
       onPick: () => calls.current.onPick?.(),
       onDrop: (where) => calls.current.onDrop?.(where),
+      // The words of the latest render, whichever are given: an inline object is new each render.
+      words: Object.fromEntries(
+        (Object.keys(WORDS) as (keyof StickerWords)[]).map((name) => [name, (...args: never[]) => ((calls.current.words?.[name] ?? WORDS[name]) as (...args: never[]) => string)(...args)]),
+      ) as unknown as StickerWords,
     });
     made.current = made_;
     calls.current.handle?.(made_);

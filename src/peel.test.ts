@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FLAT, foldFor, layersAt, liftedShare, pastFold, placeOf, pullToLift, reachFor, rolled, travel } from "./peel.ts";
+import { bendFor, BOW, FLAT, foldAt, foldFor, layersAt, liftedShare, pastFold, placeOf, pullToLift, reachFor, reachOf, rolled, travel } from "./peel.ts";
 
 const RADIUS = 10;
 
@@ -81,6 +81,35 @@ describe("layersAt", () => {
   });
 });
 
+describe("the fold's bend", () => {
+  const grab = { x: 100, y: 50 };
+  const fold = foldFor(grab, { x: 40, y: 50 }, { x: 1, y: 0 }, RADIUS);
+  const depth = grab.x - fold.x;
+
+  it("folds the line through the point held as a straight fold would", () => {
+    const straight = { ...fold, bow: 0, cone: 0 };
+    for (const x of [10, 60, 95, 100]) expect(foldAt(fold, { x, y: 50 })).toEqual(foldAt(straight, { x, y: 50 }));
+  });
+
+  it("lifts like a tent: less further along the line, its front back at the edge about √BOW depths along", () => {
+    const held = pastFold(fold, grab);
+    const along = pastFold(fold, { x: grab.x, y: 50 + depth });
+    expect(along).toBeLessThan(held);
+    expect(pastFold(fold, { x: grab.x, y: 50 - depth })).toBeCloseTo(along, 9);
+    const back = Math.sqrt(BOW * (depth + fold.radius) * depth);
+    expect(pastFold(fold, { x: grab.x, y: 50 + back })).toBeCloseTo(0, 6);
+  });
+
+  it("curls tighter further along the line, as a cone toward its tip, half as wide a depth along", () => {
+    expect(foldAt(fold, { x: 80, y: 50 }).r).toBe(fold.radius);
+    expect(foldAt(fold, { x: 80, y: 50 + depth + fold.radius }).r).toBeCloseTo(fold.radius / 2, 9);
+  });
+
+  it("tents a small lift narrowly and a deep one broadly", () => {
+    expect(bendFor(4, 4).bow).toBeGreaterThan(bendFor(80, 10).bow * 5);
+  });
+});
+
 describe("liftedShare and pullToLift", () => {
   const extent = { least: 0, most: 100 };
 
@@ -95,5 +124,42 @@ describe("liftedShare and pullToLift", () => {
     const fold = foldFor(grab, { x: grab.x - pull, y: grab.y }, { x: 1, y: 0 }, RADIUS);
     expect(liftedShare(fold, extent)).toBe(1);
     expect(pastFold(fold, { x: 0, y: 50 })).toBeCloseTo(Math.PI * RADIUS, 6);
+  });
+});
+
+describe("reachOf", () => {
+  // A 100-pixel square, peeled from its right-hand edge.
+  const square = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 },
+  ];
+
+  it("is the sheet itself, and a curl's radius round, when little is lifted", () => {
+    const fold = foldFor({ x: 100, y: 50 }, { x: 90, y: 50 }, { x: 1, y: 0 }, RADIUS);
+    const reach = reachOf(fold, square);
+    expect(reach.left).toBeCloseTo(-RADIUS);
+    expect(reach.right).toBeLessThanOrEqual(100 + RADIUS);
+    expect(reach.top).toBeCloseTo(-RADIUS);
+  });
+
+  it("reaches past the far edge once more than half is lifted, as far as the sheet is thrown", () => {
+    const fold = foldFor({ x: 100, y: 50 }, { x: -40, y: 50 }, { x: 1, y: 0 }, RADIUS);
+    const reach = reachOf(fold, square);
+    // The right-hand edge, peeled back over, lies left of where the left-hand one is.
+    expect(reach.left).toBeLessThan(-20);
+    const corner = placeOf(fold, { x: 100, y: 0 });
+    expect(reach.left).toBeLessThanOrEqual(corner.x - RADIUS + 1e-9);
+    // Wherever any point of the sheet is drawn, it's inside.
+    for (let x = 0; x <= 100; x += 5) {
+      for (let y = 0; y <= 100; y += 5) {
+        const at = placeOf(fold, { x, y });
+        expect(at.x).toBeGreaterThanOrEqual(reach.left);
+        expect(at.x).toBeLessThanOrEqual(reach.right);
+        expect(at.y).toBeGreaterThanOrEqual(reach.top);
+        expect(at.y).toBeLessThanOrEqual(reach.bottom);
+      }
+    }
   });
 });

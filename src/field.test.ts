@@ -87,6 +87,23 @@ describe("cutOf", () => {
     expect(fieldAt(cutOf(ring, 80, 80, 2, 2), 40, 40)).toBeLessThan(0);
   });
 
+  it("measures how deep each point is from the outer edge, a filled hole as deep as its ring", () => {
+    const solid = cutOf(disc(80, 30), 80, 80, 0, 0);
+    const at = (cut: ReturnType<typeof cutOf>, x: number, y: number) => cut.depth[y * 80 + x];
+    // As deep as the field says, where nothing's been filled: deeper toward the middle, 0 outside.
+    for (const x of [40, 55, 65, 69]) expect(at(solid, x, 40)).toBeCloseTo(-solid.field[40 * 80 + x], 5);
+    expect(at(solid, 40, 40)).toBeGreaterThan(27);
+    expect(at(solid, 70, 40)).toBe(0);
+    expect(at(solid, 2, 2)).toBe(0);
+    // A ring whose hole is filled is as deep as a disc there, to a pixel, where the field is shallow.
+    const ring = disc(80, 30);
+    const hole = disc(80, 12);
+    for (let i = 0; i < ring.length; i++) if (hole[i]) ring[i] = 0;
+    const filled = cutOf(ring, 80, 80, 0, 0);
+    for (const x of [40, 48, 53, 60]) expect(Math.abs(at(filled, x, 40) - at(solid, x, 40))).toBeLessThan(1.6);
+    expect(-filled.field[40 * 80 + 40]).toBeLessThan(1);
+  });
+
   it("says when there's nothing to cut round", () => {
     const cut = cutOf(new Uint8Array(16), 4, 4, 2);
     expect(cut.empty).toBe(true);

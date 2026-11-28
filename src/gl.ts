@@ -167,13 +167,17 @@ export function imageTexture(s: Stage, source: TexImageSource, into?: Texture | 
   return { texture, generation: s.generation, width: size.width, height: size.height };
 }
 
-/** A field of numbers (one a pixel, top row first) as a half-float texture, read between pixels. */
-export function fieldTexture(s: Stage, field: Float32Array, width: number, height: number, into?: Texture | null): Texture {
+/** Up to four fields of numbers (one a pixel each, top row first) as one half-float texture, in its red, green, blue and alpha, read between pixels. */
+export function fieldTexture(s: Stage, fields: readonly Float32Array[], width: number, height: number, into?: Texture | null): Texture {
   const { gl } = s;
   const texture = into && into.generation === s.generation ? into.texture : gl.createTexture()!;
+  const all = new Float32Array(width * height * 4);
+  fields.forEach((field, channel) => {
+    for (let i = 0; i < field.length; i++) all[i * 4 + channel] = field[i];
+  });
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, width, height, 0, gl.RED, gl.FLOAT, field);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, all);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);

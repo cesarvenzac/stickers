@@ -22,6 +22,12 @@ export function resolveColours(markup: string, element: Element): string {
     .replace(/currentColor/gi, style.color);
 }
 
+/**
+ * What a source draws as on `element`: SVG markup with its colours read there (so it changes when
+ * the page's tokens do), and anything else as it is. Two sources with the same key draw the same.
+ */
+export const keyOf = (source: Source, element: Element): Source => (typeof source === "string" && isMarkup(source) ? resolveColours(source, element) : source);
+
 /** The source as something to draw, once it's loaded. Rejects when it can't be. */
 export async function load(source: Source, element: Element): Promise<CanvasImageSource> {
   if (typeof source !== "string") return source;

@@ -98,6 +98,8 @@ export function fillHoles(shape: Uint8Array, width: number, height: number) {
 export type Cut = {
   /** The signed distance to the cut's edge, a pixel of the field each, row by row from the top. */
   field: Float32Array;
+  /** How far in from the cut's outer edge each pixel is (0 outside): a filled hole is as deep as what's round it, so a dome over it doesn't dip. */
+  depth: Float32Array;
   width: number;
   height: number;
   /** Whether the art had anything in it to cut round. */
@@ -151,7 +153,7 @@ export function cutOf(alpha: ArrayLike<number>, width: number, height: number, o
       if (a >= 0.5) empty = false;
     }
   }
-  if (empty) return { field: new Float32Array(width * height).fill(Math.max(width, height)), width, height, empty };
+  if (empty) return { field: new Float32Array(width * height).fill(Math.max(width, height)), depth: new Float32Array(width * height), width, height, empty };
   const toArt = distanceFrom(toward, w, h);
   const fromArt = distanceFrom(away, w, h);
   // The art's own signed distance, negative inside it.
@@ -178,9 +180,24 @@ export function cutOf(alpha: ArrayLike<number>, width: number, height: number, o
   const before = shape.slice();
   fillHoles(shape, w, h);
   for (let i = 0; i < shape.length; i++) if (shape[i] && !before[i]) padded[i] = -0.5;
+  // How deep each pixel is, from the outer edge alone: the cut's own distance where it agrees (to a
+  // fraction of a pixel), and the whole-pixel distance where a filled hole's rim is nearer.
+  const outside = new Uint8Array(shape.length);
+  for (let i = 0; i < shape.length; i++) outside[i] = shape[i] ? 0 : 1;
+  const toOutside = distanceTo(outside, w, h);
+  const deep = new Float32Array(w * h);
+  for (let i = 0; i < deep.length; i++) {
+    if (!shape[i]) continue;
+    const whole = Math.max(0, toOutside[i] - 0.5);
+    deep[i] = Math.abs(-padded[i] - whole) <= 1 ? Math.max(0, -padded[i]) : whole;
+  }
   const field = new Float32Array(width * height);
-  for (let y = 0; y < height; y++) field.set(padded.subarray((y + pad) * w + pad, (y + pad) * w + pad + width), y * width);
-  return { field, width, height, empty };
+  const depth = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    field.set(padded.subarray((y + pad) * w + pad, (y + pad) * w + pad + width), y * width);
+    depth.set(deep.subarray((y + pad) * w + pad, (y + pad) * w + pad + width), y * width);
+  }
+  return { field, depth, width, height, empty };
 }
 
 /** The field's value at a point (in pixels of the field, 0 to `width` across), read between pixels as a texture is, clamped at its edges. */

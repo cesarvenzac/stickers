@@ -14,9 +14,40 @@ export type { Point };
 /**
  * Where the sticker is folded: a point on the fold line (`x`, `y`), the direction across it toward
  * the lifted side (`nx`, `ny`, a unit vector) and the cylinder's radius. The line lies on the
- * sticker; everything at a distance `a` past it, measured flat, is lifted.
+ * sticker; everything at a distance `a` past it, measured flat, is lifted. A sheet pulled at a point
+ * doesn't fold along a straight line, though: it lifts like a tent, most where it's held. So the
+ * fold bends (`bendFor`): its front bows back toward the edge as it goes along the line from the
+ * point held (`bow`, a pixel back for each pixel along, squared), and its curl tightens there as
+ * a cone's does toward its tip (`cone`: the radius over 1 + cone · the pixels along), where less
+ * is lifted. The line through the grabbed point is folded exactly as a straight fold would.
  */
-export type Fold = { x: number; y: number; nx: number; ny: number; radius: number };
+export type Fold = { x: number; y: number; nx: number; ny: number; radius: number; bow?: number; cone?: number };
+
+/** How tented a fold is, for the threshold: the larger, the flatter its front. */
+export const BOW = 3;
+/** How much tighter its curl grows along the line, over the depth lifted: half as wide, a depth along. */
+export const CONE = 1;
+
+/**
+ * How a fold `depth` pixels deep at the point held (the curl `radius` round) bends: the front comes
+ * back to the edge about √BOW times the depth along the line on either side, so a small lift is a
+ * small tent and a deep one a broad curve, and the curl tightens by CONE over the depth.
+ */
+export function bendFor(depth: number, radius: number): { bow: number; cone: number } {
+  const span = Math.max(depth + radius, 1e-3);
+  return { bow: 1 / (BOW * span), cone: CONE / span };
+}
+
+/**
+ * Where a flat point stands against a fold, bent: how far past its front it is (`s`, negative on the
+ * stuck side) and the curl's radius there (`r`). Along the line through the point held, as straight.
+ */
+export function foldAt(fold: Fold, point: Point): { s: number; r: number } {
+  const dx = point.x - fold.x;
+  const dy = point.y - fold.y;
+  const t = -dx * fold.ny + dy * fold.nx;
+  return { s: dx * fold.nx + dy * fold.ny - (fold.bow ?? 0) * t * t, r: fold.radius / (1 + (fold.cone ?? 0) * Math.abs(t)) };
+}
 
 /** A fold that lifts nothing: the line far off, past every sticker. */
 export const FLAT: Fold = { x: -1e6, y: -1e6, nx: -1, ny: 0, radius: 1 };
@@ -74,18 +105,47 @@ export function foldFor(grab: Point, pointer: Point, outward: Point, radius: num
   nx /= length;
   ny /= length;
   const a = reachFor(Math.hypot(vx, vy), radius);
-  return { x: grab.x - a * nx, y: grab.y - a * ny, nx, ny, radius };
+  return { x: grab.x - a * nx, y: grab.y - a * ny, nx, ny, radius, ...bendFor(a, radius) };
 }
 
-/** How far a point lies past the fold, flat (negative: on the stuck side). */
-export const pastFold = (fold: Fold, point: Point) => (point.x - fold.x) * fold.nx + (point.y - fold.y) * fold.ny;
+/** How far a point lies past the fold's front, flat (negative: on the stuck side). */
+export const pastFold = (fold: Fold, point: Point) => foldAt(fold, point).s;
 
 /** Where a flat point of the sticker is seen from above once folded, and how high it stands. */
 export function placeOf(fold: Fold, point: Point): Point & { height: number } {
-  const a = pastFold(fold, point);
+  const { s: a, r } = foldAt(fold, point);
   if (a <= 0) return { x: point.x, y: point.y, height: 0 };
-  const { along, height } = rolled(a, fold.radius);
+  const { along, height } = rolled(a, r);
   return { x: point.x + (along - a) * fold.nx, y: point.y + (along - a) * fold.ny, height };
+}
+
+/** A box: its left, top, right and bottom. */
+export type Reach = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * Where a sheet folded as `fold` is drawn, seen from above, as a box in its own pixels: every point
+ * of its `hull` where it lies once folded (a peel past half throws the sheet past the far edge), the
+ * edges between them followed (a bent fold moves their middles further than their ends), and the
+ * curl's crest a radius round.
+ */
+export function reachOf(fold: Fold, hull: readonly Point[]): Reach {
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  const take = (point: Point) => {
+    left = Math.min(left, point.x);
+    top = Math.min(top, point.y);
+    right = Math.max(right, point.x);
+    bottom = Math.max(bottom, point.y);
+  };
+  for (let i = 0; i < hull.length; i++) {
+    const from = hull[i];
+    const to = hull[(i + 1) % hull.length];
+    take(from);
+    for (let k = 0; k < 4; k++) take(placeOf(fold, { x: from.x + ((to.x - from.x) * k) / 4, y: from.y + ((to.y - from.y) * k) / 4 }));
+  }
+  return { left: left - fold.radius, top: top - fold.radius, right: right + fold.radius, bottom: bottom + fold.radius };
 }
 
 export type Layer = {
@@ -103,8 +163,7 @@ export type Layer = {
  * down. Each is a point of the sticker; the first that's inside its shape is the one seen.
  */
 export function layersAt(fold: Fold, point: Point): Layer[] {
-  const s = pastFold(fold, point);
-  const r = fold.radius;
+  const { s, r } = foldAt(fold, point);
   const layers: Layer[] = [];
   const at = (a: number, face: Layer["face"], height: number) =>
     layers.push({ x: point.x + (a - s) * fold.nx, y: point.y + (a - s) * fold.ny, face, height });
